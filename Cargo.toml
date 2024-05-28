@@ -1,0 +1,13 @@
+[package]
+name = "websocket_actix"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.6.0"
+actix-web-actors = "4.3.0"
+actix = "0.13.3"
+futures-util = "0.3.30"
+uuid = { version = "1.8.0", features = ["v4", "serde"] }
+actix-test = "0.1.3"
+env_logger = "0.11.3"

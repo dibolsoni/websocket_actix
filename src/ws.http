@@ -1,0 +1,16 @@
+
+### 1. Run the another_ws
+WEBSOCKET ws://localhost:3030/another_ws/1
+
+###
+WEBSOCKET ws://localhost:3030/another_ws/2
+
+===
+
+### 1. Run the ws
+
+WEBSOCKET ws://localhost:3030/ws/12321412421232121312321212132132
+
+
+### 2. Run the ws same room
+WEBSOCKET ws://localhost:3030/ws/12321412421232121312321212132132
