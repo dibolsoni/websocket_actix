@@ -6,6 +6,7 @@ use actix::{AsyncContext, Handler};
 use actix_web_actors::ws;
 use std::time::{Duration, Instant};
 use actix::fut::ready;
+use actix_web::web::Data;
 use uuid::Uuid;
 
 
@@ -15,13 +16,13 @@ const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct WsConn {
     room_id: Uuid,
-    lobby_address: Addr<Lobby>,
+    lobby_address: Data<Addr<Lobby>>,
     heartbeat: Instant,
     id: Uuid,
 }
 
 impl WsConn {
-    pub fn new(room: Uuid, lobby_address: Addr<Lobby>) -> Self {
+    pub fn new(room: Uuid, lobby_address: Data<Addr<Lobby>>) -> Self {
         WsConn {
             room_id: room,
             lobby_address,
@@ -45,8 +46,8 @@ impl Actor for WsConn {
         self.lobby_address
             .send(Connect {
                 address: address.recipient(),
-                lobby_id: self.room_id,
-                self_id: self.id,
+                room_id: self.room_id,
+                user_id: self.id,
             })
             .into_actor(self)
             .then(|res, _, _ctx| {
@@ -64,7 +65,7 @@ impl Actor for WsConn {
     /// Stop actor sync.
     fn stopping(&mut self, _: &mut Self::Context) -> Running {
         self.lobby_address.do_send(Disconnect {
-            id: self.id,
+            user_id: self.id,
             room_id: self.room_id,
         });
         Running::Stop
@@ -76,7 +77,7 @@ impl WsConn {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.heartbeat) > HEARTBEAT_TIMEOUT {
                 act.lobby_address.do_send(Disconnect {
-                    id: act.id,
+                    user_id: act.id,
                     room_id: act.room_id,
                 });
                 ctx.stop();
@@ -110,7 +111,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsConn {
             Ok(ws::Message::Nop) => (),
             Ok(ws::Message::Text(s)) => {
                 self.lobby_address.do_send(ClientActorMessage {
-                    id: self.id,
+                    user_id: self.id,
                     message: s.parse().unwrap(),
                     room_id: self.room_id
                 });
@@ -125,6 +126,6 @@ impl Handler<WsMessage> for WsConn {
     type Result = ();
 
     fn handle(&mut self, message: WsMessage, ctx: &mut Self::Context) {
-        ctx.text(message.0);
+        ctx.text(serde_json::to_string(&message).unwrap());
     }
 }

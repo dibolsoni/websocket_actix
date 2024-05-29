@@ -23,12 +23,13 @@ impl Default for Lobby {
 }
 
 impl Lobby {
-    fn send_message(&self, to_id: Uuid, message: &str) {
+    fn send_message(&self, from_id: Uuid, to_id: Uuid, message: &str) {
         if let Some(socket_recipient) = self.sessions.get(&to_id) {
             let _ = socket_recipient
-                .do_send(WsMessage(message.to_owned()));
+                .do_send(WsMessage::new(from_id, message.to_owned()));
         } else {
             println!("Not found user: [{}] on sending message", to_id);
+            println!("users: {:?}", self.sessions.keys());
         }
     }
 }
@@ -43,22 +44,23 @@ impl Handler<Disconnect> for Lobby {
     type Result = ();
 
     fn handle(&mut self, msg: Disconnect, _: &mut Self::Context) -> Self::Result {
-        if self.sessions.remove(&msg.id).is_some() {
+        if self.sessions.remove(&msg.user_id).is_some() {
             self.rooms
                 .get(&msg.room_id)
                 .unwrap()
                 .iter()
-                .filter(|conn_id| *conn_id.to_owned() != msg.id)
+                .filter(|conn_id| *conn_id.to_owned() != msg.user_id)
                 .for_each(|conn_id| {
                     self.send_message(
+                        msg.user_id,
                         conn_id.to_owned(),
-                        &format!("User: [{}] has left the room", msg.id)
+                        &format!("User: [{}] has left the room", msg.user_id)
                     );
                 });
 
             if let Some(lobby) = self.rooms.get_mut(&msg.room_id) {
                 if lobby.len() > 1 {
-                    lobby.remove(&msg.id);
+                    lobby.remove(&msg.user_id);
                 } else {
                     self.rooms.remove(&msg.room_id);
                 }
@@ -72,21 +74,37 @@ impl Handler<Connect> for Lobby {
     type Result = ();
 
     fn handle(&mut self, msg: Connect, _: &mut Self::Context) -> Self::Result {
-        self.rooms.entry(msg.lobby_id).or_insert_with(HashSet::new).insert(msg.self_id);
+        self.rooms.entry(msg.room_id).or_insert_with(HashSet::new).insert(msg.user_id);
 
-        self.rooms.get(&msg.lobby_id).unwrap().iter().for_each(|conn_id| {
+        self.rooms.get(&msg.room_id)
+            .unwrap()
+            .iter()
+            .filter(|conn_id| *conn_id.to_owned() != msg.user_id)
+            .for_each(|conn_id| {
             self.send_message(
+                msg.user_id,
                 conn_id.to_owned(),
-                &format!("User: [{}] has joined the room", msg.self_id)
+                &format!("User: [{}] has joined the room", msg.user_id)
             );
         });
 
         self.sessions.insert(
-            msg.self_id,
+            msg.user_id,
             msg.address,
         );
 
-        self.send_message(msg.self_id, &format!("Your id is {}", msg.self_id));
+        println!("Connected Lobby: {}", msg.room_id);
+
+        self.rooms.get(&msg.room_id)
+            .unwrap()
+            .iter()
+            .for_each(|conn_id| {
+                self.send_message(
+                    msg.user_id,
+                    conn_id.to_owned(),
+                    &format!("Connected Lobby: {}", msg.room_id)
+                );
+            });
     }
 }
 
@@ -98,8 +116,9 @@ impl Handler<ClientActorMessage> for Lobby {
             if let Some(to_id) = msg.message.split_whitespace().nth(1) {
                 if let Ok(to_id) = to_id.parse::<Uuid>() {
                     self.send_message(
+                        msg.user_id,
                         to_id,
-                        &format!("Whisper from [{}]: {}", msg.id, msg.message)
+                        &format!("Whisper from [{}]: {}", msg.user_id, msg.message)
                     );
                 }
             }
@@ -110,8 +129,9 @@ impl Handler<ClientActorMessage> for Lobby {
                 .iter()
                 .for_each(|conn_id| {
                     self.send_message(
+                        msg.user_id,
                         conn_id.to_owned(),
-                        &format!("[{}]: {}", msg.id, msg.message)
+                        &format!("{}", msg.message)
                     );
                 });
         }

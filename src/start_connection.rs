@@ -15,14 +15,11 @@ pub async fn start_ws(
     group_id: Path<Uuid>,
     lobby: Data<Addr<Lobby>>,
 ) -> impl Responder {
-    let group_id = group_id.into_inner();
     let ws = WsConn::new(
-        group_id,
-        lobby.get_ref().clone(),
+        group_id.into_inner(),
+        lobby,
     );
-    // ws::start(ws, &req, stream).unwrap();
-    HttpResponse::Ok()
-        .body("Hello")
+    ws::start(ws, &req, stream).unwrap()
 }
 
 pub async fn another_ws(
